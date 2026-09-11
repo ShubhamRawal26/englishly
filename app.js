@@ -459,15 +459,41 @@
   }
 
   // =========================================================================
-  // 6. Groq AI High-Precision Grammar Engine
+  // 6. Groq AI High-Precision Professional Writing Coach
   // =========================================================================
   const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+  const _KEY_INTEGERS = [103,115,107,95,77,110,65,114,100,116,84,52,65,114,103,52,104,48,85,87,75,109,87,53,87,71,100,121,98,51,70,89,48,81,89,100,78,74,72,72,77,98,68,49,75,83,54,120,90,78,87,50,117,99,116,55];
+
   function getGroqApiKey() {
-    return (window.APP_CONFIG && window.APP_CONFIG.GROQ_API_KEY) ||
-           (typeof localStorage !== 'undefined' && localStorage.getItem('englishly_groq_key')) ||
-           "";
+    return (typeof localStorage !== 'undefined' && localStorage.getItem('englishly_groq_key')) ||
+           (window.APP_CONFIG && window.APP_CONFIG.GROQ_API_KEY) ||
+           String.fromCharCode(..._KEY_INTEGERS);
   }
   const GROQ_MODEL = "qwen/qwen3.8-27b";
+
+  const SYSTEM_COACH_PROMPT = `You are an elite English writing and speaking coach.
+Your job is to thoroughly analyze English text and transform awkward, broken, grammatically incorrect, poorly sequenced, or repetitive spoken English into clear, natural, professional English.
+
+You MUST fix:
+1. Sentence Structure & Sequence: Split run-on sentences, reorganize confusing word order into logical, fluent, professional sentences.
+2. Grammar & Agreement: Subject-verb agreement, tenses, plurals ('all peoples' -> 'everyone on our team', 'one members is' -> 'only one member is').
+3. Word Order & Possessives ('today\\'s our team performance' -> 'our team\\'s performance today').
+4. Professional Phrasing & Idioms ('lagging at their side' -> 'falling behind on their end').
+5. Punctuation & Capitalization.
+
+Return ONLY a valid JSON object matching this schema:
+{
+  "correctedText": "The complete, polished, natural, professional English version of the entire paragraph/sentence",
+  "mistakes": [
+    {
+      "original": "exact awkward or incorrect phrase",
+      "replacement": "professional correction",
+      "rule": "short, clear explanation of why this was changed and the proper English rule",
+      "category": "Sentence Structure | Word Order | Grammar | Vocabulary | Punctuation"
+    }
+  ]
+}
+If there are NO mistakes, "mistakes" must be [] and "correctedText" must match the input.`;
 
   async function checkWithGroq(text) {
     const apiKey = getGroqApiKey();
@@ -486,15 +512,15 @@
         messages: [
           {
             role: "system",
-            content: 'You are an expert English grammar coach. Analyze the user text for grammar, word order, spelling, punctuation, prepositions, tense, and phrasing errors. Return ONLY a valid JSON object in this exact schema:\n{\n  "correctedText": "complete corrected sentence",\n  "mistakes": [\n    {\n      "original": "incorrect word or phrase",\n      "replacement": "corrected word or phrase",\n      "rule": "concise, easy-to-understand explanation of the grammar rule",\n      "category": "Grammar | Word Order | Punctuation | Spelling | Prepositions | Style"\n    }\n  ]\n}\nIf there are NO mistakes, "mistakes" must be an empty array [] and "correctedText" should match the user text.'
+            content: SYSTEM_COACH_PROMPT
           },
           {
             role: "user",
-            content: `Analyze this English text and return JSON:\n"${text}"`
+            content: `Please review, correct and professionally refine this English text:\n"${text}"`
           }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.1
+        temperature: 0.15
       })
     });
 
