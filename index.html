@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Englishly — Personal Grammar Coach</title>
+  <meta name="description" content="A premium, focused personal English writing and speaking correction tool.">
+  
+  <!-- Premium Typography: Newsreader & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- Top Header & Status -->
+    <header class="app-header">
+      <a href="#" class="brand" id="brand-link" aria-label="Englishly Home">
+        <div class="brand-icon">E</div>
+        <h1 class="brand-title">Englishly</h1>
+      </a>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button type="button" id="btn-api-key" class="btn-icon" style="width: 30px; height: 30px; border-radius: 6px;" title="Groq AI Key Settings" aria-label="API Key Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px;">
+            <circle cx="7.5" cy="15.5" r="5.5"/>
+            <path d="m21 2-9.6 9.6"/>
+            <path d="m15.5 7.5 3 3L22 7l-3-3"/>
+          </svg>
+        </button>
+        <div class="header-status" id="cloud-status" title="Sync Status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Ready</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN VIEW: Writing & Grammar Correction -->
+    <main class="view active" id="view-home">
+      
+      <!-- Writing Editor Card -->
+      <section class="editor-card" aria-label="Writing Area">
+        <textarea 
+          id="writing-input" 
+          class="editor-textarea" 
+          placeholder="Type or speak your English here..." 
+          spellcheck="false"
+          aria-label="Enter English text to check"></textarea>
+
+        <div class="editor-meta">
+          <div class="speech-status" id="speech-indicator">
+            <span class="listening-pulse"></span>
+            <span>Listening...</span>
+          </div>
+          <div class="word-counter" id="text-counter">0 words</div>
+        </div>
+      </section>
+
+      <!-- Action Bar: Mic, Clear, Check -->
+      <div class="editor-actions">
+        <div class="action-left">
+          <!-- Voice Input Button -->
+          <button type="button" class="btn-icon" id="btn-mic" title="Speak to write" aria-label="Toggle voice input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" x2="12" y1="19" y2="22"/>
+            </svg>
+          </button>
+
+          <!-- Clear Text Button -->
+          <button type="button" class="btn-icon" id="btn-clear" title="Clear text" aria-label="Clear writing area">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"/>
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Primary Check Button -->
+        <button type="button" class="btn-primary" id="btn-check" aria-label="Check grammar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span id="btn-check-text">Check</span>
+        </button>
+      </div>
+
+      <!-- Human-readable notification banner -->
+      <div class="alert-banner" id="alert-banner" role="alert"></div>
+
+      <!-- Results Display Container -->
+      <section class="results-section" id="results-container" aria-live="polite">
+        <!-- Dynamic content rendered by app.js: Clean card or Mistakes card breakdown -->
+      </section>
+
+    </main>
+
+    <!-- HISTORY VIEW -->
+    <main class="view" id="view-history">
+      <div class="history-header">
+        <h2 class="history-title">History</h2>
+        <span class="badge" id="history-total-badge">0 saved</span>
+      </div>
+
+      <div class="history-groups" id="history-list">
+        <!-- Rendered dynamically from Firebase Realtime Database -->
+      </div>
+    </main>
+
+    <!-- Minimal Subtle Footer -->
+    <footer class="app-footer">
+      <p>Englishly • Personal Grammar Coach</p>
+    </footer>
+
+    <!-- Fixed Bottom Navigation (Mobile-first) -->
+    <nav class="bottom-nav" aria-label="Main Navigation">
+      <button type="button" class="nav-tab active" id="tab-home" aria-label="Editor tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+        <span>Editor</span>
+      </button>
+      <button type="button" class="nav-tab" id="tab-history" aria-label="History tab">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>History</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- Detail Modal for inspecting past check -->
+  <div class="modal-overlay" id="history-modal" role="dialog" aria-modal="true" aria-labelledby="modal-heading">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-heading">Saved Correction</h3>
+        <button type="button" class="btn-modal-close" id="btn-close-modal" aria-label="Close modal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div id="modal-body">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase v10 Compat SDK via Official CDN -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <!-- Application Modules -->
+  <script src="config.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
