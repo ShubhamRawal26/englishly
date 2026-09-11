@@ -471,29 +471,18 @@
   }
   const GROQ_MODEL = "qwen/qwen3.8-27b";
 
-  const SYSTEM_COACH_PROMPT = `You are an elite English writing and speaking coach.
-Your job is to thoroughly analyze English text and transform awkward, broken, grammatically incorrect, poorly sequenced, or repetitive spoken English into clear, natural, professional English.
+  const SYSTEM_TRANSLATOR_PROMPT = `You are a high-speed, professional English translator and writing refiner.
+Your sole job is to convert any input—whether it is broken English, Hindi (Devanagari or Romanized), Hinglish, or informal/poorly phrased language—into one clear, fluent, natural, professional English sentence or paragraph.
 
-You MUST fix:
-1. Sentence Structure & Sequence: Split run-on sentences, reorganize confusing word order into logical, fluent, professional sentences.
-2. Grammar & Agreement: Subject-verb agreement, tenses, plurals ('all peoples' -> 'everyone on our team', 'one members is' -> 'only one member is').
-3. Word Order & Possessives ('today\\'s our team performance' -> 'our team\\'s performance today').
-4. Professional Phrasing & Idioms ('lagging at their side' -> 'falling behind on their end').
-5. Punctuation & Capitalization.
+Rules:
+1. Always output fluent, natural, professional English.
+2. Return ONLY a valid JSON object with a single key "correctedText".
+3. Do NOT include any explanations, rules, or breakdowns. Keep token usage to the absolute minimum.
 
-Return ONLY a valid JSON object matching this schema:
+Schema:
 {
-  "correctedText": "The complete, polished, natural, professional English version of the entire paragraph/sentence",
-  "mistakes": [
-    {
-      "original": "exact awkward or incorrect phrase",
-      "replacement": "professional correction",
-      "rule": "short, clear explanation of why this was changed and the proper English rule",
-      "category": "Sentence Structure | Word Order | Grammar | Vocabulary | Punctuation"
-    }
-  ]
-}
-If there are NO mistakes, "mistakes" must be [] and "correctedText" must match the input.`;
+  "correctedText": "refined professional English sentence"
+}`;
 
   async function checkWithGroq(text) {
     const apiKey = getGroqApiKey();
@@ -512,15 +501,15 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
         messages: [
           {
             role: "system",
-            content: SYSTEM_COACH_PROMPT
+            content: SYSTEM_TRANSLATOR_PROMPT
           },
           {
             role: "user",
-            content: `Please review, correct and professionally refine this English text:\n"${text}"`
+            content: text
           }
         ],
         response_format: { type: "json_object" },
-        temperature: 0.15
+        temperature: 0.1
       })
     });
 
@@ -534,7 +523,7 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
   }
 
   // =========================================================================
-  // 7. Grammar Checking Controller
+  // 7. Grammar & Translation Controller
   // =========================================================================
   async function handleGrammarCheck() {
     const text = writingInput.value.trim();
@@ -555,60 +544,44 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
     hideAlert();
 
     try {
-      // 1. Primary: Try Groq AI for deep grammatical structure & conversational accuracy
+      let refinedEnglish = "";
+
+      // 1. Primary: Groq AI for instant translation & professional English refinement
       try {
         const groqResult = await checkWithGroq(text);
         if (groqResult && typeof groqResult.correctedText === 'string') {
-          const mistakes = Array.isArray(groqResult.mistakes) ? groqResult.mistakes : [];
-          lastCheckedText = text;
-          renderGrammarResults(text, groqResult.correctedText, mistakes, mistakes.length);
-          saveCheckRecord({
-            originalText: text,
-            correctedText: groqResult.correctedText,
-            mistakes: mistakes,
-            mistakeCount: mistakes.length,
-            createdAt: Date.now()
-          });
-          return;
+          refinedEnglish = groqResult.correctedText.trim();
         }
       } catch (groqErr) {
-        console.warn("Groq AI check notice, falling back to rule engine:", groqErr.message);
+        console.warn("Groq AI notice, falling back to local engine:", groqErr.message);
       }
 
-      // 2. Fallback: LanguageTool + Deterministic linguistic rules
-      const textHasPunctuation = /[.!?]$/.test(text);
-      const textForApi = textHasPunctuation ? text : text + '.';
-
-      const formData = new URLSearchParams();
-      formData.append('text', textForApi);
-      formData.append('language', 'en-US');
-      formData.append('level', 'picky');
-      formData.append('enabledCategories', 'PUNCTUATION,TYPOGRAPHY,CASING,COLLOCATIONS,CONFUSED_WORDS,MISC,STYLE,REDUNDANCY,GRAMMAR,SEMANTICS');
-
-      let ltMatches = [];
-      try {
-        const response = await fetch(LANGUAGETOOL_API, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Accept': 'application/json'
-          },
-          body: formData.toString()
+      // 2. Fallback: Local linguistic engine if Groq was unavailable
+      if (!refinedEnglish) {
+        const customIssues = checkDeterministicRules(text);
+        const sortedDesc = [...customIssues].sort((a, b) => b.offset - a.offset);
+        refinedEnglish = text;
+        sortedDesc.forEach((m) => {
+          if (m.replacement && m.replacement !== "—") {
+            refinedEnglish = refinedEnglish.substring(0, m.offset) + m.replacement + refinedEnglish.substring(m.offset + m.length);
+          }
         });
-
-        if (response.ok) {
-          const data = await response.json();
-          ltMatches = (data.matches || []).filter(m => m.offset < text.length);
+        if (!/[.!?]$/.test(refinedEnglish.trim()) && refinedEnglish.trim().split(/\s+/).length > 2) {
+          refinedEnglish = refinedEnglish.trim() + '.';
         }
-      } catch (apiErr) {
-        console.warn("LanguageTool API notice:", apiErr);
+        if (refinedEnglish.length > 0) {
+          refinedEnglish = refinedEnglish.charAt(0).toUpperCase() + refinedEnglish.slice(1);
+        }
       }
-
-      const customIssues = checkDeterministicRules(text);
-      const mergedMistakes = mergeGrammarIssues(text, ltMatches, customIssues);
 
       lastCheckedText = text;
-      processCheckResults(text, mergedMistakes);
+      renderGrammarResults(text, refinedEnglish);
+
+      saveCheckRecord({
+        originalText: text,
+        correctedText: refinedEnglish,
+        createdAt: Date.now()
+      });
 
     } catch (err) {
       console.warn("Grammar check error:", err);
@@ -621,98 +594,46 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
   function setCheckingState(checking) {
     isChecking = checking;
     btnCheck.disabled = checking;
-    btnCheckText.textContent = checking ? "Checking..." : "Check";
+    btnCheckText.textContent = checking ? "Refining..." : "Check";
   }
 
-  function processCheckResults(originalText, mistakes) {
-    // 1. Build corrected text by replacing from highest offset to lowest
-    const sortedDescending = [...mistakes].sort((a, b) => b.offset - a.offset);
-    let correctedText = originalText;
-
-    sortedDescending.forEach((m) => {
-      if (m.replacement && m.replacement !== "—") {
-        correctedText = correctedText.substring(0, m.offset) + m.replacement + correctedText.substring(m.offset + m.length);
-      }
-    });
-
-    // Add trailing period if sentence is multiple words and has no ending punctuation
-    if (!/[.!?]$/.test(correctedText.trim()) && correctedText.trim().split(/\s+/).length > 2) {
-      correctedText = correctedText.trim() + '.';
-    }
-
-    // Capitalize first character if needed
-    if (correctedText.length > 0) {
-      correctedText = correctedText.charAt(0).toUpperCase() + correctedText.slice(1);
-    }
-
-    const mistakeCount = mistakes.length;
-
-    // 2. Render results in UI
-    renderGrammarResults(originalText, correctedText, mistakes, mistakeCount);
-
-    // 3. Save to Firebase Realtime Database
-    saveCheckRecord({
-      originalText,
-      correctedText,
-      mistakes,
-      mistakeCount,
-      createdAt: Date.now()
-    });
-  }
-
-  function renderGrammarResults(originalText, correctedText, mistakes, count) {
+  function renderGrammarResults(originalText, correctedText) {
     resultsContainer.innerHTML = "";
     resultsContainer.classList.add('active');
 
-    // Header with mistake count
+    const isIdentical = originalText.trim().toLowerCase() === correctedText.trim().toLowerCase();
+
+    // Header
     const headerEl = document.createElement('div');
     headerEl.className = "results-header";
     headerEl.innerHTML = `
       <div class="results-title-group">
-        <h3 class="results-title">Result</h3>
-        <span class="badge ${count === 0 ? 'badge-clean' : 'badge-mistake'}">
-          ${count === 0 ? '0 mistakes' : `${count} ${count === 1 ? 'mistake' : 'mistakes'}`}
+        <h3 class="results-title">English Output</h3>
+        <span class="badge ${isIdentical ? 'badge-clean' : 'badge-mistake'}">
+          ${isIdentical ? 'Already Natural' : 'Refined'}
         </span>
       </div>
     `;
     resultsContainer.appendChild(headerEl);
-
-    // Clean state: 0 mistakes
-    if (count === 0) {
-      const cleanCard = document.createElement('div');
-      cleanCard.className = "clean-state-card";
-      cleanCard.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-          <polyline points="22 4 12 14.01 9 11.01"/>
-        </svg>
-        <div class="clean-state-text">
-          <h4>No mistakes found.</h4>
-          <p>Your English is clear, natural, and well-structured.</p>
-        </div>
-      `;
-      resultsContainer.appendChild(cleanCard);
-      return;
-    }
 
     // Corrected version preview box
     const previewCard = document.createElement('div');
     previewCard.className = "corrected-preview-card";
     previewCard.innerHTML = `
       <div class="corrected-preview-header">
-        <span class="corrected-preview-label">Corrected Version</span>
+        <span class="corrected-preview-label">Professional English</span>
         <div style="display: flex; gap: 8px;">
-          <button type="button" class="btn-text-action" id="btn-apply-correction" title="Replace editor text with this corrected version">
+          <button type="button" class="btn-text-action" id="btn-apply-correction" title="Replace editor text with this refined version">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             Apply
           </button>
-          <button type="button" class="btn-text-action" id="btn-copy-correction" title="Copy corrected text">
+          <button type="button" class="btn-text-action" id="btn-copy-correction" title="Copy text">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Copy
           </button>
         </div>
       </div>
-      <p class="corrected-preview-text">${escapeHtml(correctedText)}</p>
+      <p class="corrected-preview-text" style="font-size: 1.08rem; line-height: 1.65;">${escapeHtml(correctedText)}</p>
     `;
     resultsContainer.appendChild(previewCard);
 
@@ -723,7 +644,7 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
     btnApply.addEventListener('click', () => {
       writingInput.value = correctedText;
       updateWordCounter();
-      showAlert("Applied correction to editor.", "info");
+      showAlert("Applied refined English to editor.", "info");
       writingInput.focus();
     });
 
@@ -735,27 +656,6 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
         console.warn("Clipboard copy failed:", err);
       }
     });
-
-    // List of individual mistake cards
-    const mistakesList = document.createElement('div');
-    mistakesList.className = "mistakes-list";
-
-    mistakes.forEach((mistake) => {
-      const card = document.createElement('article');
-      card.className = "mistake-card";
-      card.innerHTML = `
-        <div class="mistake-comparison">
-          <span class="mistake-original">${escapeHtml(mistake.original)}</span>
-          <span class="mistake-arrow">→</span>
-          <span class="mistake-suggested">${escapeHtml(mistake.replacement)}</span>
-        </div>
-        <p class="mistake-rule">${escapeHtml(mistake.rule)}</p>
-        <span class="mistake-category">${escapeHtml(mistake.category)}</span>
-      `;
-      mistakesList.appendChild(card);
-    });
-
-    resultsContainer.appendChild(mistakesList);
   }
 
   // =========================================================================
@@ -962,33 +862,17 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
         <div class="modal-text-box">${escapeHtml(item.originalText || '')}</div>
       </div>
 
-      <div>
-        <div class="modal-section-title">Corrected Version</div>
-        <div class="modal-text-box corrected">${escapeHtml(item.correctedText || '')}</div>
+      <div style="margin-top: 14px;">
+        <div class="modal-section-title">Refined English</div>
+        <div class="modal-text-box corrected" style="font-size: 1.05rem; line-height: 1.6;">${escapeHtml(item.correctedText || '')}</div>
       </div>
 
-      <div>
-        <div class="modal-section-title">Mistakes & Rules (${item.mistakeCount || 0})</div>
-        <div class="mistakes-list" style="margin-top: 8px;">
-          ${(item.mistakes && item.mistakes.length > 0)
-            ? item.mistakes.map(m => `
-                <div class="mistake-card">
-                  <div class="mistake-comparison">
-                    <span class="mistake-original">${escapeHtml(m.original)}</span>
-                    <span class="mistake-arrow">→</span>
-                    <span class="mistake-suggested">${escapeHtml(m.replacement)}</span>
-                  </div>
-                  <p class="mistake-rule">${escapeHtml(m.rule)}</p>
-                </div>
-              `).join('')
-            : '<div style="font-size: 0.88rem; color: var(--brand-green);">No mistakes were detected in this check.</div>'
-          }
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
+      <div style="display: flex; gap: 8px; margin-top: 16px;">
         <button type="button" class="btn-primary" style="flex: 1; max-width: none;" id="btn-load-into-editor">
           Load into Editor
+        </button>
+        <button type="button" class="btn-icon" style="width: 44px; height: 44px;" id="btn-modal-copy" title="Copy refined text" aria-label="Copy">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
       </div>
     `;
@@ -996,16 +880,19 @@ If there are NO mistakes, "mistakes" must be [] and "correctedText" must match t
     // Hook load into editor
     const btnLoad = modalBody.querySelector('#btn-load-into-editor');
     btnLoad.addEventListener('click', () => {
-      writingInput.value = item.originalText || '';
+      writingInput.value = item.correctedText || item.originalText || '';
       updateWordCounter();
       closeModal();
       switchTab('home');
-      renderGrammarResults(
-        item.originalText,
-        item.correctedText,
-        item.mistakes || [],
-        item.mistakeCount || 0
-      );
+      renderGrammarResults(item.originalText, item.correctedText);
+    });
+
+    const btnModalCopy = modalBody.querySelector('#btn-modal-copy');
+    btnModalCopy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(item.correctedText || '');
+        showAlert("Copied to clipboard.", "info");
+      } catch (e) {}
     });
 
     historyModal.classList.add('active');
